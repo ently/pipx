@@ -8,6 +8,8 @@ from pathlib import Path
 from shutil import which
 from typing import List, NoReturn
 
+from packaging import version
+
 from pipx import constants
 from pipx.commands.common import package_name_from_spec
 from pipx.constants import TEMP_VENV_EXPIRATION_THRESHOLD_DAYS, WINDOWS
@@ -43,6 +45,7 @@ def run(
     pypackages: bool,
     verbose: bool,
     use_cache: bool,
+    force_latest: bool,
 ) -> NoReturn:
     """Installs venv to temporary dir (or reuses cache), then runs app from
     package
@@ -115,6 +118,7 @@ def run(
             venv_args,
             use_cache,
             verbose,
+            force_latest,
         )
 
 
@@ -129,6 +133,7 @@ def _download_and_run(
     venv_args: List[str],
     use_cache: bool,
     verbose: bool,
+    force_latest: bool,
 ) -> NoReturn:
     venv = Venv(venv_dir, python=python, verbose=verbose)
     venv.create_venv(venv_args, pip_args)
@@ -140,14 +145,37 @@ def _download_and_run(
             package_or_url, python, pip_args=pip_args, verbose=verbose
         )
 
-    venv.install_package(
-        package_name=package_name,
-        package_or_url=package_or_url,
-        pip_args=pip_args,
-        include_dependencies=False,
-        include_apps=True,
-        is_main_package=True,
-    )
+    if force_latest and app_filename in venv.list_installed_packages():
+        # check to see if we're running latest available
+        latest_published_version = venv.get_latest_package_version(
+            package_name=package_name, package_or_url=package_or_url, pip_args=pip_args
+        )
+        cached_version = venv.get_venv_metadata_for_package(
+            app_filename, set()
+        ).package_version
+        if version.parse(latest_published_version) > version.parse(cached_version):
+            print(
+                f"Cached version of {app} ({cached_version}) is out of date, "
+                f"upgrading to ({latest_published_version})."
+            )
+            venv.upgrade_package(
+                package_name=package_name,
+                package_or_url=package_or_url,
+                pip_args=pip_args,
+                include_dependencies=False,
+                include_apps=True,
+                is_main_package=True,
+            )
+    else:
+        print("either not forcing latest or no cached version found :P")
+        venv.install_package(
+            package_name=package_name,
+            package_or_url=package_or_url,
+            pip_args=pip_args,
+            include_dependencies=False,
+            include_apps=True,
+            is_main_package=True,
+        )
 
     if not venv.has_app(app, app_filename):
         apps = venv.pipx_metadata.main_package.apps

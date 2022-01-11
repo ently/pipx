@@ -443,3 +443,43 @@ class Venv:
             cmd_str = " ".join(str(c) for c in cmd)
             logger.error(f"{cmd_str!r} failed")
         return ExitCode(returncode)
+
+    def get_latest_package_version(
+        self, package_name: str, package_or_url: str, pip_args: List[str]
+    ) -> str:
+        # package_name in package specifier can mismatch URL due to user error
+        package_or_url = fix_package_name(package_or_url, package_name)
+
+        # check syntax and clean up spec and pip_args
+        (package_or_url, pip_args) = parse_specifier_for_install(
+            package_or_url, pip_args
+        )
+
+        # for searching palantir - replace 'extra-index-url' with 'index'
+        for i, pip_arg in enumerate(pip_args):
+            if "index" in pip_arg:
+                pip_args[i] = "--index"
+
+        with animate(
+            f"checking for latest version of {full_package_description(package_name, package_or_url)}",
+            self.do_animation,
+        ):
+
+            cmd = (
+                [str(self.python_path), "-m", "pip", "search"]
+                + pip_args
+                + [package_or_url]
+            )
+
+            # no logging because any errors will be specially logged by
+            #   subprocess_post_check_handle_pip_error()
+            pip_process = run_subprocess(cmd, log_stdout=False, log_stderr=False)
+        subprocess_post_check_handle_pip_error(pip_process)
+        if pip_process.returncode:
+            raise PipxError(
+                f"Error installing {full_package_description(package_name, package_or_url)}."
+            )
+        output = pip_process.stdout
+        # match on version in output like 'baseline-module-installer (0.52.0)  - Module Installer'
+        version = re.findall(r"\(([^\)]+)\)", output)[0]
+        return version

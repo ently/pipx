@@ -195,6 +195,7 @@ def run_pipx_command(args: argparse.Namespace) -> ExitCode:  # noqa: C901
             args.pypackages,
             verbose,
             use_cache,
+            args.force_latest,
         )
         # We should never reach here because run() is NoReturn.
         return ExitCode(1)
@@ -551,6 +552,11 @@ def _add_run(subparsers: argparse._SubParsersAction) -> None:
         default=DEFAULT_PYTHON,
         help="The Python version to run package's CLI app with. Must be v3.6+.",
     )
+    p.add_argument(
+        "--force-latest",
+        action="store_true",
+        help="Check if cached version of app is latest available, upgrade if not",
+    )
     add_pip_venv_args(p)
     p.set_defaults(subparser=p)
 
@@ -770,7 +776,27 @@ def cli() -> ExitCode:
         hide_cursor()
         parser = get_command_parser()
         argcomplete.autocomplete(parser)
+
+        # use normal to list
         parsed_pipx_args = parser.parse_args()
+        # print(parsed_pipx_args)
+        # Hack to manually set the args - change things here as needed to debug
+        # install BM 0.49.0
+        # parsed_pipx_args = argparse.Namespace(command='install', version=False,
+        #                                       package_spec='baseline-module-installer==0.49.0', include_deps=False,
+        #                                       verbose=False, force=False, suffix='',
+        #                                       python='/usr/local/opt/python@3.9/bin/python3.9',
+        #                                       system_site_packages=False, index_url=None, editable=False,
+        #                                       pip_args='--extra-index-url https://publish.artifactory.palantir.build/artifactory/api/pypi/internal-python-release/simple')
+
+        # run BM --version
+        # parsed_pipx_args = argparse.Namespace(command='run', version=False, no_cache=False,
+        #                                       app_with_args=['baseline-module-installer', '--version'], pypackages=False,
+        #                                       spec=None, verbose=False, python='/usr/local/opt/python@3.9/bin/python3.9',
+        #                                       system_site_packages=False, index_url=None, editable=False,
+        #                                       pip_args='--extra-index-url https://publish.artifactory.palantir.build/artifactory/api/pypi/internal-python-release/simple',
+        #                                       subparser=argparse.ArgumentParser(prog='pipx run', conflict_handler='error', add_help=True))
+
         setup(parsed_pipx_args)
         check_args(parsed_pipx_args)
         if not parsed_pipx_args.command:
